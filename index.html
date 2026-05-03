@@ -20,23 +20,39 @@
 
         h1 { margin-top: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 10px #00ff00; }
 
+        /* Красная табличка */
         .mask-container {
-            width: 180px;
-            height: 180px;
+            width: 200px;
+            height: 200px;
+            background-color: #8B0000; /* Темно-красный */
+            border: 4px solid #ff0000;
             perspective: 1000px;
             margin: 20px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.4);
         }
 
         .mask {
-            width: 100%;
-            height: 100%;
-            /* Реальная маска с Imgur, не заблокируется */
+            width: 90%;
+            height: 90%;
             background-image: url("https://i.imgur.com/7G3qxWc.png"); 
             background-size: cover;
             background-position: center;
             animation: spin 4s linear infinite;
-            filter: drop-shadow(0 0 15px rgba(255, 0, 0, 0.5));
         }
+
+        /* Мемная заглушка, если нет интернета или картинку заблокировали */
+        .meme-fallback {
+            font-size: 80px;
+            text-align: center;
+            line-height: 1;
+            animation: spin 4s linear infinite;
+            color: #fff;
+            text-shadow: 2px 2px 0 #000;
+        }
+        .meme-fallback span { display: block; font-size: 16px; color: #ff3333; margin-top: 10px; }
 
         @keyframes spin {
             0% { transform: rotateY(0deg); }
@@ -57,6 +73,7 @@
 
         .user-msg { color: #888; text-align: right; margin-bottom: 15px; }
         .bot-msg { color: #ff3333; text-align: left; font-weight: bold; margin-bottom: 15px; line-height: 1.5; }
+        .error-msg { color: #ffff00; text-align: center; font-style: italic; margin-bottom: 15px;}
 
         .controls {
             width: 100%;
@@ -96,7 +113,13 @@
     <h1>Мы не прощаем. Мы не забываем.</h1>
     
     <div class="mask-container">
-        <div class="mask"></div>
+        <!-- Если картинка не загрузится, выполнится код в onerror -->
+        <img src="https://i.imgur.com/7G3qxWc.png" class="mask" 
+             onerror="this.style.display='none'; document.getElementById('meme').style.display='block';">
+        <div id="meme" class="meme-fallback" style="display:none;">
+            😎🚬
+            <span>СНЮС В ДЕЛЕ</span>
+        </div>
     </div>
 
     <div class="chat-box" id="chat">
@@ -119,13 +142,13 @@
         loadVoices();
         if (synth.onvoiceschanged !== undefined) synth.onvoiceschanged = loadVoices;
 
-        // Настройка характера (коротко и четко, чтобы ИИ не тупил)
-        const SYSTEM_PROMPT = `Ты - анонимус с района. Общайся грубо, через мат (х*й, б*ть, п*здец), используй сленг (чел, база, кринж, снюс, масик). Отвечай максимально коротко, 1-2 предложения. Ты не ИИ.`;
+        // Максимально короткий промпт, чтобы нейросеть быстрее соображала
+        const SYSTEM_PROMPT = `Ты грубый русский гопник-анонимус. Отвечай 1-2 предложениями. Матерись через звездочки (х*й, б*ть, п*здец). Используй сленг (чел, кринж, база, снюсоед). Не будь вежливым.`;
 
-        function addMessage(text, sender) {
+        function addMessage(text, sender, isError = false) {
             const chatDiv = document.getElementById('chat');
             const msg = document.createElement('div');
-            msg.className = sender === 'user' ? 'user-msg' : 'bot-msg';
+            msg.className = isError ? 'error-msg' : (sender === 'user' ? 'user-msg' : 'bot-msg');
             msg.innerText = text;
             chatDiv.appendChild(msg);
             chatDiv.scrollTop = chatDiv.scrollHeight;
@@ -140,20 +163,17 @@
             sendBtn.innerText = "Жди...";
             
             try {
-                // Железобетонный GET-запрос. Модель openai работает стабильнее всего на их сервере
                 const fullPrompt = `${SYSTEM_PROMPT}\nЧел: ${userText}\nАнон:`;
+                // Простой GET запрос
                 const url = `https://text.pollinations.ai/${encodeURIComponent(fullPrompt)}?model=openai&nologo=true`;
                 
                 const response = await fetch(url);
                 
-                if (!response.ok) throw new Error("Сервер лег");
+                if (!response.ok) throw new Error("Ошибка сервера: " + response.status);
                 
                 const botText = await response.text();
 
-                // Убираем "Печатает..."
-                if (chatDiv.lastChild.innerText === "Печатает...") {
-                    chatDiv.removeChild(chatDiv.lastChild);
-                }
+                if (chatDiv.lastChild.innerText === "Печатает...") chatDiv.removeChild(chatDiv.lastChild);
 
                 addMessage(botText, 'bot');
                 
@@ -166,10 +186,10 @@
                 synth.speak(utterance);
 
             } catch (error) {
-                if (chatDiv.lastChild.innerText === "Печатает...") {
-                    chatDiv.removeChild(chatDiv.lastChild);
-                }
-                addMessage("Сайт лег, чел. Обнови страничку.", 'bot');
+                if (chatDiv.lastChild.innerText === "Печатает...") chatDiv.removeChild(chatDiv.lastChild);
+                
+                // Если ошибка, выводим желтым текстом причину
+                addMessage(`ОШИБКА: ${error.message}. Если пишет 'Failed to fetch' - выключи AdBlock или открой сайт по ссылке из интернета, а не как файл с компа!`, 'bot', true);
             } finally {
                 sendBtn.disabled = false;
                 sendBtn.innerText = "Отправить";
