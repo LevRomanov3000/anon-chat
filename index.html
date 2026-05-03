@@ -18,29 +18,24 @@
             box-sizing: border-box;
         }
 
-        h1 { margin-top: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 2px; }
+        h1 { margin-top: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 10px #00ff00; }
 
         .mask-container {
-            width: 150px;
-            height: 150px;
+            width: 180px;
+            height: 180px;
             perspective: 1000px;
             margin: 20px 0;
-            /* Если картинка не загрузится, будет черный квадрат с надписью */
-            background-color: #000; 
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 2px solid #333;
         }
 
         .mask {
             width: 100%;
             height: 100%;
-            /* Картинка закодирована прямо в текст, теперь её не заблокировать */
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Cpath fill='%23fff' d='M100 10C50 10 10 50 10 100s40 90 90 90 90-40 90-90S150 10 100 10zm-40 60c5-5 15-5 20 0l20 20 20-20c5-5 15-5 20 0s5 15 0 20l-20 20 20 20c5 5 5 15 0 20s-15 5-20 0l-20-20-20 20c-5 5-15 5-20 0s-5-15 0-20l20-20-20-20c-5-5-5-15 0-20z'/%3E%3C/svg%3E");
+            /* Реальная маска с Imgur, не заблокируется */
+            background-image: url("https://i.imgur.com/7G3qxWc.png"); 
             background-size: cover;
             background-position: center;
-            animation: spin 3s linear infinite;
+            animation: spin 4s linear infinite;
+            filter: drop-shadow(0 0 15px rgba(255, 0, 0, 0.5));
         }
 
         @keyframes spin {
@@ -61,7 +56,7 @@
         }
 
         .user-msg { color: #888; text-align: right; margin-bottom: 15px; }
-        .bot-msg { color: #ff3333; text-align: left; font-weight: bold; margin-bottom: 15px; line-height: 1.4; }
+        .bot-msg { color: #ff3333; text-align: left; font-weight: bold; margin-bottom: 15px; line-height: 1.5; }
 
         .controls {
             width: 100%;
@@ -93,6 +88,7 @@
         }
 
         button:hover { background-color: #00cc00; }
+        button:disabled { background-color: #555; color: #999; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -104,19 +100,18 @@
     </div>
 
     <div class="chat-box" id="chat">
-        <div class="bot-msg">Ну че, подходи. Че надо? Пиши в чат, чел.</div>
+        <div class="bot-msg">Ну че, подходи. Че надо?</div>
     </div>
 
     <div class="controls">
-        <input type="text" id="user-input" placeholder="Напиши сообщение..." onkeypress="handleKeyPress(event)">
-        <button onclick="sendText()">Отправить</button>
+        <input type="text" id="user-input" placeholder="Пиши тут..." onkeypress="handleKeyPress(event)">
+        <button id="send-btn" onclick="sendText()">Отправить</button>
     </div>
 
     <script>
         const synth = window.speechSynthesis;
         let russianVoice = null;
 
-        // Настраиваем русский голос
         function loadVoices() {
             const voices = synth.getVoices();
             russianVoice = voices.find(v => v.lang.includes('RU') || v.lang.includes('ru')) || voices[0];
@@ -124,8 +119,8 @@
         loadVoices();
         if (synth.onvoiceschanged !== undefined) synth.onvoiceschanged = loadVoices;
 
-        // Настройка характера бота
-        const SYSTEM_PROMPT = `Ты - анонимный хакер, гопник с района. Общайся максимально грубо, используя русский сленг, сарказм, слова типа "чел", "бродяга", "база", "кринж", "снюсоед". Используй мат через звездочки типа "х*й", "п*здец", "б*ть" (чтобы не словить бан). Отвечай коротко, по делу, дерзко. Ты НЕ ИИ.`;
+        // Настройка характера (коротко и четко, чтобы ИИ не тупил)
+        const SYSTEM_PROMPT = `Ты - анонимус с района. Общайся грубо, через мат (х*й, б*ть, п*здец), используй сленг (чел, база, кринж, снюс, масик). Отвечай максимально коротко, 1-2 предложения. Ты не ИИ.`;
 
         function addMessage(text, sender) {
             const chatDiv = document.getElementById('chat');
@@ -136,23 +131,26 @@
             chatDiv.scrollTop = chatDiv.scrollHeight;
         }
 
-        // Отправка в нейросеть (самый надежный бесплатный метод)
         async function getBotResponse(userText) {
+            const chatDiv = document.getElementById('chat');
+            const sendBtn = document.getElementById('send-btn');
+            
             addMessage("Печатает...", 'bot');
-            const sendBtn = document.querySelector('button');
             sendBtn.disabled = true;
             sendBtn.innerText = "Жди...";
             
             try {
-                // Собираем запрос в одну ссылку
-                const fullPrompt = SYSTEM_PROMPT + "\nЧел: " + userText + "\nАнон:";
-                const url = `https://text.pollinations.ai/${encodeURIComponent(fullPrompt)}?model=mistral&nologo=true`;
+                // Железобетонный GET-запрос. Модель openai работает стабильнее всего на их сервере
+                const fullPrompt = `${SYSTEM_PROMPT}\nЧел: ${userText}\nАнон:`;
+                const url = `https://text.pollinations.ai/${encodeURIComponent(fullPrompt)}?model=openai&nologo=true`;
                 
                 const response = await fetch(url);
+                
+                if (!response.ok) throw new Error("Сервер лег");
+                
                 const botText = await response.text();
 
                 // Убираем "Печатает..."
-                const chatDiv = document.getElementById('chat');
                 if (chatDiv.lastChild.innerText === "Печатает...") {
                     chatDiv.removeChild(chatDiv.lastChild);
                 }
@@ -168,11 +166,10 @@
                 synth.speak(utterance);
 
             } catch (error) {
-                const chatDiv = document.getElementById('chat');
                 if (chatDiv.lastChild.innerText === "Печатает...") {
                     chatDiv.removeChild(chatDiv.lastChild);
                 }
-                addMessage("Сайт лег, враги победили. Пиши потом.", 'bot');
+                addMessage("Сайт лег, чел. Обнови страничку.", 'bot');
             } finally {
                 sendBtn.disabled = false;
                 sendBtn.innerText = "Отправить";
